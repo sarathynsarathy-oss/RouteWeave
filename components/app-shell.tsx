@@ -8,9 +8,10 @@ import { HERO_VIDEO_URL } from '@/lib/mock-trip'
 const navItems = [
   { label: 'EXPLORE', href: '/explore' },
   { label: 'HOW IT WORKS', href: '/how-it-works' },
-  { label: 'PLANNER', href: '/planner' },
+  { label: 'ABOUT US', href: '/about' },
   { label: 'MY TRIPS', href: '/my-trips' },
-  { label: 'ADAPT', href: '/adapt' },
+  { label: 'SIGN IN', href: '/signin' },
+  { label: 'SIGN UP', href: '/signup' },
 ]
 
 function Brand() {
@@ -78,14 +79,18 @@ export function AppShell({
       <div className="relative z-10 flex min-h-screen flex-col">
         <nav className="flex items-center justify-between px-5 py-5 sm:px-8 sm:py-6 lg:px-12">
           <Brand />
-          <div className="hidden items-stretch gap-3 md:flex">
-            <div className="flex items-center gap-1 rounded-full bg-white/10 px-1.5 py-1.5 backdrop-blur-lg">
+          <div className="hidden items-stretch gap-2 lg:flex xl:gap-3">
+            <div className="flex items-center gap-0.5 rounded-full bg-white/10 px-1.5 py-1.5 backdrop-blur-lg xl:gap-1">
               {navItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors hover:bg-white/10 hover:text-white ${
-                    activeHref === item.href ? 'bg-white/15 text-white' : 'text-white/80'
+                  className={`rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-white/10 hover:text-white xl:px-4 xl:text-sm ${
+                    item.href === '/signup'
+                      ? 'border border-white/20 bg-white/15 text-white hover:bg-white/25'
+                      : activeHref === item.href
+                        ? 'bg-white/15 text-white'
+                        : 'text-white/80'
                   }`}
                 >
                   {item.label}
@@ -101,7 +106,7 @@ export function AppShell({
             aria-label={menuOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((open) => !open)}
-            className="relative z-50 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-lg md:hidden"
+            className="relative z-50 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-lg lg:hidden"
           >
             <Menu className={`absolute h-5 w-5 transition-all duration-300 ${menuOpen ? 'rotate-90 scale-0 opacity-0' : ''}`} />
             <X className={`absolute h-5 w-5 transition-all duration-300 ${menuOpen ? 'rotate-0 scale-100 opacity-100' : '-rotate-90 scale-0 opacity-0'}`} />

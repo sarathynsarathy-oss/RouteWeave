@@ -6,13 +6,14 @@ import { ChevronDown, Menu, X } from 'lucide-react'
 const videoUrl =
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260803_192301_9231ed6b-c55c-4a48-909c-4ebe11cf2e11.mp4'
 
-const navItems = ['EXPLORE', 'HOW IT WORKS', 'MY TRIPS']
-
-function navHref(item: string) {
-  if (item === 'EXPLORE') return '/explore'
-  if (item === 'HOW IT WORKS') return '/how-it-works'
-  return '/my-trips'
-}
+const navItems = [
+  { label: 'EXPLORE', href: '/explore' },
+  { label: 'HOW IT WORKS', href: '/how-it-works' },
+  { label: 'ABOUT US', href: '/about' },
+  { label: 'MY TRIPS', href: '/my-trips' },
+  { label: 'SIGN IN', href: '/signin' },
+  { label: 'SIGN UP', href: '/signup' },
+]
 
 function Brand({ mobile = false }: { mobile?: boolean }) {
   return (
@@ -47,17 +48,17 @@ export default function Page() {
       <div className="relative z-10 flex h-full flex-col">
         <nav className="flex items-center justify-between px-5 py-5 sm:px-8 sm:py-6 lg:px-12">
           <Brand />
-          <div className="hidden items-stretch gap-3 md:flex">
-            <div className="flex items-center gap-1 rounded-full bg-white/10 px-1.5 py-1.5 backdrop-blur-lg">
+          <div className="hidden items-stretch gap-2 lg:flex xl:gap-3">
+            <div className="flex items-center gap-0.5 rounded-full bg-white/10 px-1.5 py-1.5 backdrop-blur-lg xl:gap-1">
               {navItems.map((item) => (
-                <a key={item} href={navHref(item)} className="flex items-center gap-1 rounded-full px-4 py-1.5 text-sm font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white">
-                  {item}{item === 'HOW IT WORKS' && <ChevronDown className="h-3.5 w-3.5" />}
+                <a key={item.href} href={item.href} className={`flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white xl:px-4 xl:text-sm ${item.href === '/signup' ? 'border border-white/20 bg-white/15 text-white hover:bg-white/25' : ''}`}>
+                  {item.label}{item.label === 'HOW IT WORKS' && <ChevronDown className="h-3.5 w-3.5" />}
                 </a>
               ))}
             </div>
             <GetStartedButton className="self-stretch px-5" />
           </div>
-          <button type="button" aria-label={menuOpen ? 'Close menu' : 'Open menu'} aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)} className="relative z-50 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-[#010101] backdrop-blur-lg lg:text-white md:hidden">
+          <button type="button" aria-label={menuOpen ? 'Close menu' : 'Open menu'} aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)} className="relative z-50 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-[#010101] backdrop-blur-lg lg:text-white lg:hidden">
             <Menu className={`absolute h-5 w-5 transition-all duration-300 ${menuOpen ? 'rotate-90 scale-0 opacity-0' : ''}`} />
             <X className={`absolute h-5 w-5 transition-all duration-300 ${menuOpen ? 'rotate-0 scale-100 opacity-100' : '-rotate-90 scale-0 opacity-0'}`} />
           </button>
@@ -66,11 +67,14 @@ export default function Page() {
         <div className={`fixed inset-0 z-40 bg-black/80 backdrop-blur-md transition-opacity duration-300 ${menuOpen ? 'opacity-100' : 'pointer-events-none opacity-0'}`} onClick={() => setMenuOpen(false)} />
         <aside className={`fixed right-0 top-0 z-40 flex h-full w-72 flex-col bg-black/90 backdrop-blur-xl transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${menuOpen ? 'translate-x-0' : 'translate-x-full'}`}>
           <div className="flex flex-col gap-2 px-6 pt-24">
-            {navItems.map((item, index) => (
-              <a key={item} href={navHref(item)} onClick={() => setMenuOpen(false)} className="flex items-center justify-between rounded-xl px-4 py-3.5 text-base font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white" style={{ transitionDelay: menuOpen ? `${(index + 1) * 60}ms` : '0ms', opacity: menuOpen ? 1 : 0, transform: menuOpen ? 'translateX(0)' : 'translateX(24px)', transition: 'opacity 400ms ease, transform 400ms ease, background-color 200ms ease, color 200ms ease' }}>
-                {item}{item === 'HOW IT WORKS' && <ChevronDown className="h-4 w-4" />}
-              </a>
-            ))}
+            {navItems.map((item, index) => {
+              const delay = menuOpen ? `${(index + 1) * 60}ms` : '0ms'
+              return (
+                <a key={item.href} href={item.href} onClick={() => setMenuOpen(false)} className="flex items-center justify-between rounded-xl px-4 py-3.5 text-base font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white" style={{ opacity: menuOpen ? 1 : 0, transform: menuOpen ? 'translateX(0)' : 'translateX(24px)', transition: `opacity 400ms ease ${delay}, transform 400ms ease ${delay}, background-color 200ms ease, color 200ms ease` }}>
+                  {item.label}{item.label === 'HOW IT WORKS' && <ChevronDown className="h-4 w-4" />}
+                </a>
+              )
+            })}
           </div>
           <div className="mt-auto px-6 pb-10" style={{ opacity: menuOpen ? 1 : 0, transform: menuOpen ? 'translateY(0)' : 'translateY(16px)', transition: 'opacity 400ms ease 300ms, transform 400ms ease 300ms' }}><GetStartedButton className="h-12 w-full" /></div>
         </aside>
