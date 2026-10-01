@@ -1,21 +1,58 @@
 'use client'
 
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { Eye, EyeOff } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
+import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export function AuthExperience({ mode }: { mode: 'signin' | 'signup' }) {
-  const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [notice, setNotice] = useState('')
+  const [authError, setAuthError] = useState('')
+  const [connecting, setConnecting] = useState(false)
   const isSignup = mode === 'signup'
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has('authError')) {
+      setAuthError('Google sign-in did not complete. Please try again.')
+    }
+  }, [])
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setNotice('')
-    router.push('/planner')
+    setAuthError('')
+    setNotice('Email and password sign-in is not connected yet.')
+  }
+
+  async function handleGoogleSignIn() {
+    setNotice('')
+    setAuthError('')
+
+    const supabase = createSupabaseBrowserClient()
+    if (!supabase) {
+      setAuthError('Google sign-in is not configured on this deployment.')
+      return
+    }
+
+    setConnecting(true)
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      })
+
+      if (error) {
+        setConnecting(false)
+        setAuthError('Google sign-in could not be started. Please try again.')
+      }
+    } catch {
+      setConnecting(false)
+      setAuthError('Google sign-in could not be started. Please try again.')
+    }
   }
 
   return (
@@ -52,11 +89,12 @@ export function AuthExperience({ mode }: { mode: 'signin' | 'signup' }) {
 
             <button
               type="button"
-              onClick={() => setNotice('Google sign-in is not connected in this MVP.')}
-              className="mt-7 flex h-12 w-full items-center justify-center gap-3 rounded-xl border border-white/15 bg-white/[0.07] text-sm font-medium text-white transition-colors hover:bg-white/[0.13] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+              onClick={handleGoogleSignIn}
+              disabled={connecting}
+              className="mt-7 flex h-12 w-full items-center justify-center gap-3 rounded-xl border border-white/15 bg-white/[0.07] text-sm font-medium text-white transition-colors hover:bg-white/[0.13] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 disabled:cursor-wait disabled:opacity-70"
             >
               <span aria-hidden="true" className="font-semibold text-base">G</span>
-              Continue with Google
+              {connecting ? 'CONNECTING...' : 'Continue with Google'}
             </button>
 
             <div className="my-6 flex items-center gap-4" aria-hidden="true">
@@ -121,6 +159,7 @@ export function AuthExperience({ mode }: { mode: 'signin' | 'signup' }) {
               </button>
             </form>
 
+            {authError && <p role="alert" className="mt-4 text-center text-xs leading-relaxed text-rose-200">{authError}</p>}
             {notice && <p role="status" className="mt-4 text-center text-xs leading-relaxed text-white/65">{notice}</p>}
 
             <p className="mt-6 text-center text-sm text-white/65">

@@ -3,16 +3,28 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import type { User } from '@supabase/supabase-js'
 import { AppShell } from '@/components/app-shell'
 import { formatInr, listSavedTrips, saveTrips, type SavedTrip } from '@/lib/mock-trip'
+import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export default function MyTripsPage() {
   const router = useRouter()
   const [trips, setTrips] = useState<SavedTrip[]>([])
+  const [user, setUser] = useState<User | null>(null)
 
   useEffect(() => {
     setTrips(listSavedTrips())
+
+    const supabase = createSupabaseBrowserClient()
+    if (!supabase) return
+
+    supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null))
   }, [])
+
+  const accountLabel = typeof user?.user_metadata?.full_name === 'string'
+    ? user.user_metadata.full_name
+    : user?.email
 
   function createTrip() {
     const demoTrip: SavedTrip = {
@@ -40,6 +52,7 @@ export default function MyTripsPage() {
             <h1 className="mt-3 text-3xl font-semibold leading-[1.1] tracking-tight text-white sm:text-4xl lg:text-[3rem]">
               SAVED JOURNEYS.
             </h1>
+            {accountLabel && <p className="mt-3 text-sm text-white/65">Signed in as {accountLabel}</p>}
           </div>
           <button
             type="button"

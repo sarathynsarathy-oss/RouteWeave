@@ -2,16 +2,16 @@
 
 import Link from 'next/link'
 import { useEffect, useState, type ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
+import type { User } from '@supabase/supabase-js'
 import { HERO_VIDEO_URL } from '@/lib/mock-trip'
+import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 const navItems = [
   { label: 'EXPLORE', href: '/explore' },
   { label: 'HOW IT WORKS', href: '/how-it-works' },
   { label: 'ABOUT US', href: '/about' },
-  { label: 'MY TRIPS', href: '/my-trips' },
-  { label: 'SIGN IN', href: '/signin' },
-  { label: 'SIGN UP', href: '/signup' },
 ]
 
 function Brand() {
@@ -55,7 +55,49 @@ export function AppShell({
   ctaHref?: string
   ctaLabel?: string
 }) {
+  const router = useRouter()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
+  const [authReady, setAuthReady] = useState(false)
+  const [authError, setAuthError] = useState('')
+
+  const accountLabel = typeof user?.user_metadata?.full_name === 'string'
+    ? user.user_metadata.full_name
+    : user?.email
+  const links = [
+    ...navItems,
+    ...(authReady
+      ? user
+        ? [{ label: 'MY TRIPS', href: '/my-trips' }]
+        : [{ label: 'SIGN IN', href: '/signin' }, { label: 'SIGN UP', href: '/signup' }]
+      : []),
+  ]
+
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient()
+    if (!supabase) {
+      setAuthReady(true)
+      return
+    }
+
+    let active = true
+    supabase.auth.getSession().then(({ data }) => {
+      if (active) {
+        setUser(data.session?.user ?? null)
+        setAuthReady(true)
+      }
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+      setAuthReady(true)
+    })
+
+    return () => {
+      active = false
+      subscription.unsubscribe()
+    }
+  }, [])
 
   useEffect(() => {
     document.body.style.overflow = menuOpen ? 'hidden' : ''
@@ -63,6 +105,22 @@ export function AppShell({
       document.body.style.overflow = ''
     }
   }, [menuOpen])
+
+  async function handleSignOut() {
+    const supabase = createSupabaseBrowserClient()
+    if (!supabase) return
+
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      setAuthError('Sign out could not be completed. Please try again.')
+      return
+    }
+
+    setAuthError('')
+    setMenuOpen(false)
+    router.push('/signin')
+    router.refresh()
+  }
 
   return (
     <section className="relative min-h-screen w-full overflow-x-hidden bg-black font-sans">
@@ -81,7 +139,7 @@ export function AppShell({
           <Brand />
           <div className="hidden items-stretch gap-2 lg:flex xl:gap-3">
             <div className="flex items-center gap-0.5 rounded-full bg-white/10 px-1.5 py-1.5 backdrop-blur-lg xl:gap-1">
-              {navItems.map((item) => (
+              {links.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -96,6 +154,16 @@ export function AppShell({
                   {item.label}
                 </Link>
               ))}
+              {user && (
+                <>
+                  <span title={accountLabel ?? undefined} className="max-w-32 truncate px-2.5 py-1.5 text-xs text-white/60 xl:px-3">
+                    {accountLabel}
+                  </span>
+                  <button type="button" onClick={handleSignOut} className="rounded-full px-2.5 py-1.5 text-xs font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white xl:px-3 xl:text-sm">
+                    SIGN OUT
+                  </button>
+                </>
+              )}
             </div>
             <CtaLink href={ctaHref} className="self-stretch px-5">
               {ctaLabel}
@@ -113,6 +181,8 @@ export function AppShell({
           </button>
         </nav>
 
+        {authError && <p role="alert" className="px-5 text-right text-xs text-rose-200 sm:px-8 lg:px-12">{authError}</p>}
+
         <div
           className={`fixed inset-0 z-40 bg-black/80 backdrop-blur-md transition-opacity duration-300 ${menuOpen ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
           onClick={() => setMenuOpen(false)}
@@ -121,7 +191,7 @@ export function AppShell({
           className={`fixed right-0 top-0 z-40 flex h-full w-72 flex-col bg-black/90 backdrop-blur-xl transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${menuOpen ? 'translate-x-0' : 'translate-x-full'}`}
         >
           <div className="flex flex-col gap-2 px-6 pt-24">
-            {navItems.map((item, index) => {
+            {links.map((item, index) => {
               const delay = menuOpen ? `${(index + 1) * 60}ms` : '0ms'
               return (
                 <Link
@@ -139,6 +209,18 @@ export function AppShell({
                 </Link>
               )
             })}
+            {user && (
+              <>
+                <span className="truncate px-4 py-3 text-sm text-white/55">{accountLabel}</span>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  className="rounded-xl px-4 py-3.5 text-left text-base font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+                >
+                  SIGN OUT
+                </button>
+              </>
+            )}
           </div>
           <div
             className="mt-auto px-6 pb-10"
