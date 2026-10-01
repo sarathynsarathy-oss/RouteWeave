@@ -1,3 +1,5 @@
+import { resolveDestinationCoordinates } from './destinations'
+
 export type RouteCoordinate = {
   latitude: number
   longitude: number
@@ -17,6 +19,7 @@ export type RouteResult = {
   geometry: Array<[number, number]>
   coordinates: RouteCoordinate[]
   legs: RouteLeg[]
+  isFallback?: boolean
 }
 
 type OsrmResponse = {
@@ -70,6 +73,60 @@ export async function getRoute(origin: RouteCoordinate, destination: RouteCoordi
   return getMultiStopRoute([origin, destination])
 }
 
+function distanceBetween(origin: RouteCoordinate, destination: RouteCoordinate) {
+  const radians = (degrees: number) => degrees * Math.PI / 180
+  const latitudeDelta = radians(destination.latitude - origin.latitude)
+  const longitudeDelta = radians(destination.longitude - origin.longitude)
+  const originLatitude = radians(origin.latitude)
+  const destinationLatitude = radians(destination.latitude)
+  const haversine = Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(originLatitude) * Math.cos(destinationLatitude) * Math.sin(longitudeDelta / 2) ** 2
+  return 6371 * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+}
+
+export function getDeterministicRoute(coordinates: RouteCoordinate[]): RouteResult {
+  if (coordinates.length < 2 || coordinates.some((coordinate) => !validCoordinate(coordinate))) {
+    throw new Error('At least two valid route coordinates are required')
+  }
+  const legs = coordinates.slice(1).map((destination, index) => {
+    const origin = coordinates[index]
+    const distanceKm = Math.round(distanceBetween(origin, destination) * 1.2 * 10) / 10
+    return {
+      from: origin.label || `Stop ${index + 1}`,
+      to: destination.label || `Stop ${index + 2}`,
+      distanceKm,
+      durationMinutes: Math.round(distanceKm / 55 * 60),
+    }
+  })
+  return {
+    distanceKm: Math.round(legs.reduce((total, leg) => total + leg.distanceKm, 0) * 10) / 10,
+    durationMinutes: legs.reduce((total, leg) => total + leg.durationMinutes, 0),
+    geometry: coordinates.map(({ latitude, longitude }) => [longitude, latitude]),
+    coordinates,
+    legs,
+    isFallback: true,
+  }
+}
+
+export async function getRouteWithFallback(coordinates: RouteCoordinate[]): Promise<RouteResult> {
+  try {
+    return await getMultiStopRoute(coordinates)
+  } catch {
+    return getDeterministicRoute(coordinates)
+  }
+}
+
+export async function getRouteBetweenPlaces(origin: string, destination: string): Promise<RouteResult> {
+  const [originCoordinates, destinationCoordinates] = await Promise.all([
+    resolveDestinationCoordinates(origin),
+    resolveDestinationCoordinates(destination),
+  ])
+  return getRouteWithFallback([
+    { label: origin, latitude: originCoordinates.latitude, longitude: originCoordinates.longitude },
+    { label: destination, latitude: destinationCoordinates.latitude, longitude: destinationCoordinates.longitude },
+  ])
+}
+
 export async function getMultiStopRoute(coordinates: RouteCoordinate[]): Promise<RouteResult> {
   if (coordinates.length < 2 || coordinates.some((coordinate) => !validCoordinate(coordinate))) {
     throw new Error('At least two valid route coordinates are required')
@@ -118,6 +175,14 @@ export async function getOptimizedRoute(locations: RouteCoordinate[]): Promise<R
   }
   ordered.push(destination)
   return getMultiStopRoute(ordered)
+}
+
+export async function getOptimizedRouteWithFallback(locations: RouteCoordinate[]): Promise<RouteResult> {
+  try {
+    return await getOptimizedRoute(locations)
+  } catch {
+    return getDeterministicRoute(locations)
+  }
 }
 
 export function calculateRouteEfficiency(current: RouteResult, optimized: RouteResult): number {

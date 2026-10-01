@@ -1,11 +1,7 @@
+import { getKnownDestinationCoordinates, resolveDestinationCoordinates } from './destinations'
+
 export type WeatherClassification = 'CLEAR' | 'PARTLY_CLOUDY' | 'CLOUDY' | 'RAIN' | 'HEAVY_RAIN' | 'THUNDERSTORM'
 export type DisruptionSeverity = 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH'
-
-export type DestinationCoordinates = {
-  name: string
-  latitude: number
-  longitude: number
-}
 
 export type NormalizedWeather = {
   destination: string
@@ -22,16 +18,11 @@ export type NormalizedWeather = {
   isFallback?: boolean
 }
 
-type GeocodingResponse = {
-  results?: Array<{ name?: string; latitude?: number; longitude?: number }>
-}
-
 type ForecastResponse = {
   current?: { temperature_2m?: number; precipitation?: number; weather_code?: number }
   hourly?: { precipitation_probability?: number[] }
 }
 
-const GEOCODING_URL = 'https://geocoding-api.open-meteo.com/v1/search'
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast'
 const WEATHER_CACHE_KEY = 'routeweave.weather.v2'
 const REQUEST_TIMEOUT_MS = 7000
@@ -82,16 +73,6 @@ function describeWeather(classification: WeatherClassification) {
   return classification.replace('_', ' ').toLowerCase().replace(/^./, (letter) => letter.toUpperCase())
 }
 
-export async function getCoordinates(destination: string): Promise<DestinationCoordinates> {
-  const response = await withTimeout(fetch(`${GEOCODING_URL}?name=${encodeURIComponent(destination)}&count=10&language=en&format=json`))
-  if (!response.ok) throw new Error(`Geocoding failed with ${response.status}`)
-  const data = (await response.json()) as GeocodingResponse
-  const normalizedDestination = destination.trim().toLowerCase()
-  const result = data.results?.find((candidate) => candidate.name?.trim().toLowerCase() === normalizedDestination) || data.results?.[0]
-  if (!result || !validNumber(result.latitude) || !validNumber(result.longitude)) throw new Error('Destination not found')
-  return { name: result.name || destination, latitude: result.latitude, longitude: result.longitude }
-}
-
 export async function getWeather(latitude: number, longitude: number, destination: string): Promise<NormalizedWeather> {
   const params = new URLSearchParams({
     latitude: String(latitude),
@@ -135,8 +116,9 @@ export async function getDestinationWeather(destination: string): Promise<Normal
     // Storage is optional; a network request can still provide live weather.
   }
 
+  const knownCoordinates = getKnownDestinationCoordinates(destination)
   try {
-    const coordinates = await getCoordinates(destination)
+    const coordinates = knownCoordinates || await resolveDestinationCoordinates(destination)
     const weather = await getWeather(coordinates.latitude, coordinates.longitude, destination)
     try {
       sessionStorage.setItem(`${WEATHER_CACHE_KEY}:${key}`, JSON.stringify(weather))
@@ -145,6 +127,22 @@ export async function getDestinationWeather(destination: string): Promise<Normal
     }
     return weather
   } catch {
-    return { ...demoHeavyRainWeather, destination }
+    const latitude = knownCoordinates?.latitude ?? 20.5937
+    const longitude = knownCoordinates?.longitude ?? 78.9629
+    const temperature = Math.round(30 - Math.abs(latitude - 15) * 0.35)
+    return {
+      destination,
+      latitude,
+      longitude,
+      temperature,
+      precipitationProbability: 20,
+      precipitation: 0,
+      weatherCode: 2,
+      description: 'Partly cloudy (fallback)',
+      classification: 'PARTLY_CLOUDY',
+      severity: 'NONE',
+      isOutdoorDisruption: false,
+      isFallback: true,
+    }
   }
 }

@@ -10,7 +10,7 @@ import { AdaptationCTA } from '@/components/adaptation-cta'
 import { formatInr, type JourneyTrip } from '@/lib/mock-trip'
 import { getDestinationWeather, type NormalizedWeather } from '@/lib/weather'
 import { getActivityLocation } from '@/lib/activity-locations'
-import { calculateRouteEfficiency, getMultiStopRoute, getOptimizedRoute, type RouteResult } from '@/lib/routing'
+import { calculateRouteEfficiency, getOptimizedRouteWithFallback, getRouteBetweenPlaces, getRouteWithFallback, type RouteResult } from '@/lib/routing'
 
 export default function TripDemoPage() {
   return (
@@ -32,6 +32,7 @@ function TripDashboard() {
   const [journey, setJourney] = useState<JourneyTrip | null>(null)
   const [weather, setWeather] = useState<NormalizedWeather | null>(null)
   const [route, setRoute] = useState<RouteResult | null>(null)
+  const [localRoute, setLocalRoute] = useState<RouteResult | null>(null)
   const [routeEfficiency, setRouteEfficiency] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -44,35 +45,42 @@ function TripDashboard() {
         const parsed = JSON.parse(stored) as JourneyTrip
         setJourney(parsed)
         void getDestinationWeather(parsed.to).then(setWeather)
-        let adaptedRouteLoaded = false
-        if (adapted) {
-          const storedRoute = sessionStorage.getItem('routeweave.currentRoute')
-          if (storedRoute) {
-            try {
-              setRoute(JSON.parse(storedRoute) as RouteResult)
-              setRouteEfficiency(parsed.metrics.route?.routeEfficiency ?? parsed.metrics.routeEfficiency)
-              adaptedRouteLoaded = true
-            } catch {
-              // Recalculate the original route when adapted route data is invalid.
-            }
+        void getRouteBetweenPlaces(parsed.from, parsed.to).then((overallRoute) => {
+          setRoute(overallRoute)
+          const updatedJourney = {
+            ...parsed,
+            metrics: {
+              ...parsed.metrics,
+              overallRoute: { distanceKm: overallRoute.distanceKm, durationMinutes: overallRoute.durationMinutes },
+            },
+          }
+          setJourney(updatedJourney)
+          sessionStorage.setItem('routeweave.currentJourney', JSON.stringify(updatedJourney))
+        }).catch(() => setRoute(null))
+
+        const storedLocalRoute = adapted
+          ? sessionStorage.getItem('routeweave.currentLocalRoute') || sessionStorage.getItem('routeweave.currentRoute')
+          : null
+        if (storedLocalRoute) {
+          try {
+            setLocalRoute(JSON.parse(storedLocalRoute) as RouteResult)
+          } catch {
+            // Recalculate local activity routing when stored route data is invalid.
           }
         }
-        if (!adaptedRouteLoaded) {
-          const activityLocations = (parsed.days[1]?.activities || parsed.days.flatMap((day) => day.activities))
-            .map((activity) => activity.latitude !== undefined && activity.longitude !== undefined
-              ? { label: activity.title, latitude: activity.latitude, longitude: activity.longitude }
-              : getActivityLocation(activity.title))
-            .filter((location): location is NonNullable<typeof location> => Boolean(location))
-          const locations = [getActivityLocation('Goa Hotel'), ...activityLocations]
-            .filter((location): location is NonNullable<typeof location> => Boolean(location))
-          void (locations.length >= 2 ? Promise.all([getMultiStopRoute(locations), getOptimizedRoute(locations)]) : Promise.reject(new Error('No route coordinates available')))
-            .then(([currentRoute, optimizedRoute]) => {
-              setRoute(currentRoute)
-              setRouteEfficiency(calculateRouteEfficiency(currentRoute, optimizedRoute))
-            })
-            .catch(() => {
-              setRoute(null)
-              setRouteEfficiency(null)
+        const activityLocations = (parsed.days[1]?.activities || parsed.days.flatMap((day) => day.activities))
+          .map((activity) => activity.latitude !== undefined && activity.longitude !== undefined
+            ? { label: activity.title, latitude: activity.latitude, longitude: activity.longitude }
+            : getActivityLocation(activity.title))
+          .filter((location): location is NonNullable<typeof location> => Boolean(location))
+        const locations = [getActivityLocation('Goa Hotel'), ...activityLocations]
+          .filter((location): location is NonNullable<typeof location> => Boolean(location))
+        setRouteEfficiency(parsed.metrics.localRoute?.routeEfficiency ?? parsed.metrics.route?.routeEfficiency ?? parsed.metrics.routeEfficiency)
+        if (!storedLocalRoute && locations.length >= 2) {
+          void Promise.all([getRouteWithFallback(locations), getOptimizedRouteWithFallback(locations)])
+            .then(([activityRoute, optimizedRoute]) => {
+              setLocalRoute(activityRoute)
+              setRouteEfficiency(calculateRouteEfficiency(activityRoute, optimizedRoute))
             })
         }
       } catch (e) {
@@ -128,14 +136,14 @@ function TripDashboard() {
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
           <IntelligenceCard label="BUDGET" value={`${formatInr(journey.metrics.budgetUsed)} / ${formatInr(journey.budget)}`} sublabel={`${Math.round((journey.metrics.budgetUsed / journey.budget) * 100)}% USED`} />
-          <IntelligenceCard label="ROUTE EFFICIENCY" value={`${routeEfficiency ?? journey.metrics.routeEfficiency}%`} />
-          <IntelligenceCard label="TOTAL DISTANCE" value={route ? `${route.distanceKm} KM` : 'Unavailable'} />
-          <IntelligenceCard label="TOTAL TRAVEL TIME" value={route ? `${route.durationMinutes} MIN` : 'Unavailable'} />
+          <IntelligenceCard label="ROUTE EFFICIENCY" value={`${routeEfficiency ?? journey.metrics.routeEfficiency}%`} sublabel={localRoute ? 'LOCAL ACTIVITY ROUTE' : 'ACTIVITY ROUTE EFFICIENCY'} />
+          <IntelligenceCard label="TOTAL DISTANCE" value={route ? `${route.distanceKm} KM` : 'Calculating...'} sublabel={route?.isFallback ? 'FALLBACK ROUTE ESTIMATE' : undefined} />
+          <IntelligenceCard label="TOTAL TRAVEL TIME" value={route ? `${route.durationMinutes} MIN` : 'Calculating...'} sublabel={route?.isFallback ? 'FALLBACK ROUTE ESTIMATE' : undefined} />
           <IntelligenceCard label="INTEREST MATCH" value={`${journey.metrics.interestMatch}%`} />
           <IntelligenceCard
             label="WEATHER"
-            value={weather?.isFallback ? 'Unavailable' : weather ? `${weather.temperature}°C · ${weather.description}` : 'Loading...'}
-            sublabel={weather?.isFallback ? 'WEATHER DATA UNAVAILABLE' : weather?.destination.toUpperCase()}
+            value={weather ? `${weather.temperature}°C · ${weather.description}` : 'Loading...'}
+            sublabel={weather?.isFallback ? 'FALLBACK WEATHER' : weather?.destination.toUpperCase()}
           />
         </div>
         {journey.intelligence && <p className="text-xs tracking-[0.12em] text-white/60">{journey.intelligence.status.toUpperCase()}</p>}

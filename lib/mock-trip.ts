@@ -47,6 +47,15 @@ export type JourneyTrip = {
     routeEfficiency: number
     interestMatch: number
     weather: string
+    overallRoute?: {
+      distanceKm: number
+      durationMinutes: number
+    }
+    localRoute?: {
+      distanceKm: number
+      durationMinutes: number
+      routeEfficiency: number
+    }
     route?: {
       distanceKm: number
       durationMinutes: number

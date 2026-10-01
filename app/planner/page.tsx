@@ -74,6 +74,7 @@ function PlannerContent() {
     const [result] = await Promise.all([generation, new Promise((resolve) => window.setTimeout(resolve, 3200))])
     sessionStorage.setItem('routeweave.currentJourney', JSON.stringify(result.journey))
     sessionStorage.removeItem('routeweave.currentRoute')
+    sessionStorage.removeItem('routeweave.currentLocalRoute')
     router.push('/trip/demo')
   }
 

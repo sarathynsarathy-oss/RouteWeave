@@ -6,7 +6,7 @@ import { adaptationChecks, adaptationSteps, adaptedDay02, generateJourney, origi
 import { adaptTrip, type AdaptationResult } from '@/lib/adaptation'
 import { demoHeavyRainWeather, getDestinationWeather, type NormalizedWeather } from '@/lib/weather'
 import { getActivityLocation } from '@/lib/activity-locations'
-import { calculateRouteEfficiency, getMultiStopRoute, getOptimizedRoute, type RouteResult } from '@/lib/routing'
+import { calculateRouteEfficiency, getRouteWithFallback, getOptimizedRouteWithFallback, type RouteResult } from '@/lib/routing'
 
 export default function AdaptPage() {
   const [stepIndex, setStepIndex] = useState(0)
@@ -41,28 +41,35 @@ export default function AdaptPage() {
       if (adaptationDay) {
         const result = adaptTrip(currentJourney, adaptationWeather, adaptationDay)
         setAdaptation(result)
-        const originalLocations = ['Goa Hotel', ...originalDay02, 'Dinner']
-          .map(getActivityLocation)
-          .filter((location): location is NonNullable<typeof location> => Boolean(location))
         const replacementLocations = ['Goa Hotel', ...result.replacementActivities]
           .map(getActivityLocation)
           .filter((location): location is NonNullable<typeof location> => Boolean(location))
-        void Promise.all([getMultiStopRoute(replacementLocations), getOptimizedRoute(replacementLocations), getMultiStopRoute(originalLocations)])
-          .then(([updatedRoute, optimizedRoute, originalRoute]) => {
+        void Promise.all([getRouteWithFallback(replacementLocations), getOptimizedRouteWithFallback(replacementLocations)])
+          .then(([updatedRoute, optimizedRoute]) => {
             const efficiency = calculateRouteEfficiency(updatedRoute, optimizedRoute)
             setAdaptedRoute(updatedRoute)
+            const updatedDays = currentJourney.days.map((day) => day.day === adaptationDay.day
+              ? {
+                  ...day,
+                  activities: result.replacementActivities.map((title, index) => ({
+                    ...(adaptationDay.activities[index] || adaptationDay.activities[0]),
+                    title,
+                    category: 'Indoor',
+                  })),
+                }
+              : day)
             const updatedJourney = {
               ...currentJourney,
+              days: updatedDays,
               metrics: {
                 ...currentJourney.metrics,
                 routeEfficiency: efficiency,
-                route: { distanceKm: updatedRoute.distanceKm, durationMinutes: updatedRoute.durationMinutes, routeEfficiency: efficiency },
+                localRoute: { distanceKm: updatedRoute.distanceKm, durationMinutes: updatedRoute.durationMinutes, routeEfficiency: efficiency },
               },
             }
             setJourney(updatedJourney)
             sessionStorage.setItem('routeweave.currentJourney', JSON.stringify(updatedJourney))
-            sessionStorage.setItem('routeweave.currentRoute', JSON.stringify(updatedRoute))
-            void originalRoute
+            sessionStorage.setItem('routeweave.currentLocalRoute', JSON.stringify(updatedRoute))
           })
           .catch(() => {
             setAdaptedRoute(null)
